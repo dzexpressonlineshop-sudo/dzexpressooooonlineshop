@@ -1,56 +1,52 @@
 /* ====================================================================
-   قائمة المنتجات
-   عدّل / زِد / احذف منتجات من هنا فقط، الموقع يتحدث تلقائياً
-   icon: اختر واحد من: headphones, watch, charger, backpack, sunglasses, lamp
-   image: (اختياري) رابط صورة حقيقية، إذا تركتها فارغة "" يظهر أيقونة بسيطة بدلها
+   جلب قائمة المنتجات ديناميكياً من Google Sheet عبر SheetDB
 ==================================================================== */
-const PRODUCTS = [
-  {
-    id: "p1",
-    name: "سماعات بلوتوث لاسلكية",
-    price: 3500,
-    description: "صوت نقي، بطارية تدوم طول النهار، تتوافق مع كل الهواتف.",
-    icon: "headphones",
-    image: ""
-  },
-  {
-    id: "p2",
-    name: "ساعة ذكية رياضية",
-    price: 4500,
-    description: "تتبع نشاطك اليومي ونبضات القلب، شاشة لمس واضحة.",
-    icon: "watch",
-    image: ""
-  },
-  {
-    id: "p3",
-    name: "شاحن سريع متعدد المنافذ",
-    price: 1800,
-    description: "يشحن جهازين في نفس الوقت بسرعة وأمان.",
-    icon: "charger",
-    image: ""
-  },
-  {
-    id: "p4",
-    name: "حقيبة ظهر عصرية",
-    price: 2800,
-    description: "مساحة واسعة ومريحة، مناسبة للجامعة والعمل والسفر.",
-    icon: "backpack",
-    image: ""
-  },
-  {
-    id: "p5",
-    name: "نظارة شمسية كلاسيك",
-    price: 1500,
-    description: "حماية كاملة من أشعة الشمس بتصميم أنيق.",
-    icon: "sunglasses",
-    image: ""
-  },
-  {
-    id: "p6",
-    name: "مصباح مكتبي LED",
-    price: 2200,
-    description: "إضاءة قابلة للتعديل، مريحة للعين، توفر في الكهرباء.",
-    icon: "lamp",
-    image: ""
-  }
-];
+
+// مصفوفة فارغة سيتم ملؤها تلقائياً بالمنتجات القادمة من الشيت
+let PRODUCTS = [];
+
+/**
+ * دالة لجلب البيانات من صفحة product في الـ Google Sheet
+ * وتحديث مصفوفة PRODUCTS العالمية
+ */
+function fetchProductsFromSheet() {
+  // CONFIG.APPS_SCRIPT_URL هو رابط SheetDB الخاص بك
+  // نضيف له ?sheet=product لنخبره أن يقرأ من صفحة المنتجات تحديداً
+  const url = CONFIG.APPS_SCRIPT_URL + "?sheet=product";
+
+  return fetch(url)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('خطأ في جلب المنتجات من السيرفر');
+      }
+      return response.json();
+    })
+    .then(data => {
+      // تحويل البيانات القادمة من النصوص إلى صيغة يفهمها الموقع
+      PRODUCTS = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: parseInt(item.price, 10) || 0, // تحويل السعر لرقم لحسابه لاحقاً
+        description: item.description,
+        icon: item.icon || "backpack",
+        image: item.image || ""
+      }));
+      console.log("✅ تم تحميل المنتجات بنجاح من الـ Sheet:", PRODUCTS);
+      return PRODUCTS;
+    })
+    .catch(error => {
+      console.error("❌ فشل جلب المنتجات، تم الانتقال للمنتجات الاحتياطية:", error);
+      // منتجات احتياطية تظهر فقط في حال انقطع الإنترنت أو حدث خلل في رابط الشيت
+      PRODUCTS = [
+        { 
+          id: "p1", 
+          name: "مضرب البعوض الإلكتروني", 
+          price: 2500, 
+          description: "مضرب قابل للشحن ومضاد للناموس، آمن تماماً وفعال.", 
+          icon: "lamp", 
+          image: "" 
+        }
+      ];
+      return PRODUCTS;
+    });
+}

@@ -1,5 +1,5 @@
 /* ====================================================================
-   منطق صفحة الطلب: اختيار الولاية، حساب التوصيل، إرسال الطلب (متوافق مع SheetDB)
+   منطق صفحة الطلب: اختيار الولاية، حساب التوصيل، وإرسال الطلب إلى SheetDB
 ==================================================================== */
 
 function formatPrice(n){
@@ -25,7 +25,10 @@ let selectedWilaya = null;
 let selectedDeliveryType = null; // 'office' | 'home'
 let selectedDeliveryPrice = 0;
 
-function init(){
+async function init(){
+  // 1. انتظر جلب المنتجات ليتعرف الموقع على المنتج المختار وسعره القادم من الشيت
+  await fetchProductsFromSheet();
+
   const id = getQueryParam('id');
   selectedProduct = PRODUCTS.find(p => p.id === id) || PRODUCTS[0];
 
@@ -41,6 +44,7 @@ function init(){
 
 function renderSummary(){
   const el = document.getElementById('productSummary');
+  if(!el) return;
   el.innerHTML = `
     <div class="media">${getProductMedia(selectedProduct)}</div>
     <div>
@@ -50,8 +54,17 @@ function renderSummary(){
   `;
 }
 
+function getProductMedia(p) {
+  if (p.image && p.image.trim() !== "") {
+    return `<img src="${p.image}" alt="${p.name}">`;
+  }
+  const iconSvg = typeof ICONS !== 'undefined' && ICONS[p.icon] ? ICONS[p.icon] : (typeof ICONS !== 'undefined' ? ICONS['backpack'] : '');
+  return `<div class="icon-placeholder">${iconSvg}</div>`;
+}
+
 function fillWilayaSelect(){
   const select = document.getElementById('custWilaya');
+  if(!select) return;
   WILAYAS.forEach(w => {
     const opt = document.createElement('option');
     opt.value = w.code;
@@ -76,6 +89,7 @@ function onWilayaChange(e){
 
 function renderDeliveryOptions(){
   const area = document.getElementById('deliveryArea');
+  if(!area) return;
 
   if (!selectedWilaya){
     area.innerHTML = `<span class="hint">اختر الولاية أولاً ليظهر لك سعر التوصيل</span>`;
@@ -120,6 +134,7 @@ function renderDeliveryOptions(){
 
 function updateTotals(){
   const box = document.getElementById('totalBox');
+  if(!box) return;
   if (!selectedWilaya || selectedDeliveryType === null){
     box.style.display = 'none';
     return;
@@ -133,7 +148,7 @@ function updateTotals(){
 
 function setFieldError(fieldId, hasError){
   const field = document.getElementById(fieldId);
-  field.classList.toggle('invalid', hasError);
+  if(field) field.classList.toggle('invalid', hasError);
 }
 function clearFieldError(fieldId){
   setFieldError(fieldId, false);
@@ -197,10 +212,10 @@ function onSubmit(e){
   const deliveryLabel = selectedDeliveryType === 'office' ? 'توصيل للمكتب' : 'توصيل لباب الدار';
   const total = selectedProduct.price + selectedDeliveryPrice;
 
-  // تهيئة كائن البيانات بأسماء أعمدة واضحة لجدول جوجل
+  // تهيئة كائن البيانات بأسماء أعمدة واضحة لجدول جوجل (صفحة orders)
   const orderPayload = {
     "رقم الطلب": orderId,
-    "التاريخ": new Date().toLocaleString('fr-FR'), // تنسيق وقت مناسب للجزائر
+    "التاريخ": new Date().toLocaleString('fr-FR'),
     "المنتج": selectedProduct.name,
     "سعر المنتج": selectedProduct.price,
     "الولاية": selectedWilaya.name,
@@ -217,8 +232,8 @@ function onSubmit(e){
     return;
   }
 
-  // إرسال الطلب إلى SheetDB بصيغة JSON مغلفة داخل مصفوفة data
-  fetch(CONFIG.APPS_SCRIPT_URL, {
+  // إرسال الطلب إلى SheetDB مع تحديد صفحة orders تلقائياً في الرابط
+  fetch(CONFIG.APPS_SCRIPT_URL + "?sheet=orders", {
     method: 'POST',
     headers: { 
       'Accept': 'application/json',
@@ -233,7 +248,6 @@ function onSubmit(e){
     return response.json();
   })
   .then(resData => {
-    // التحقق من نجاح الإدخال عبر حقل created الذي توفره SheetDB
     if (resData.created === 1) {
        showSuccess(orderId);
     } else {
